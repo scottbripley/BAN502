@@ -1,0 +1,114 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+```{r libraries, include=FALSE}
+library(tidyverse)
+library(tidymodels)
+```
+
+```{r}
+trucks = read_csv('trucks.csv')
+```
+Task 1:  
+```{r task 1}
+ggplot(trucks, aes(Distance, Speeding)) +
+  geom_point()
+```
+
+There appears to be two natural clusters of drivers: 1 group driving less than 100 miles/day and 1 group driving more than 100 miles/day.  
+
+Task 2:
+```{r task 2}
+kmeans_recipe = recipe(~ Distance + Speeding, trucks) 
+
+trucks_dummy = kmeans_recipe %>% 
+  step_scale(all_numeric()) %>%
+  step_center(all_numeric()) 
+
+trucks_dummy = prep(trucks_dummy, trucks) 
+
+trucks_cleaned = bake(trucks_dummy, trucks) 
+```
+
+Task 3:  
+```{r task 3}
+set.seed(64)
+clusters = kmeans(trucks_cleaned, 2)
+```
+
+```{r}
+trucks = augment(clusters, trucks)
+str(trucks)
+```
+
+
+```{r}
+ggplot(trucks, aes(x=Distance,y=Speeding,color=factor(.cluster))) + geom_point() 
+```
+
+The clusters are similar to what I assumed from the first graph, with the exception of 1 driver above 100 miles who was clustered with the <100 miles/day group.  
+
+Task 4:  
+```{r task 4}
+set.seed(412)
+clusts = 
+  tibble(k = 1:8) %>%
+  mutate(
+    kclust = map(k, ~kmeans(trucks_cleaned, .x)),
+    tidied = map(kclust, tidy),
+    glanced = map(kclust, glance),
+    augmented = map(kclust, augment, trucks_cleaned)
+  )
+
+clusters = 
+  clusts %>%
+  unnest(cols = c(tidied))
+
+assignments = 
+  clusts %>% 
+  unnest(cols = c(augmented))
+
+clusterings = 
+  clusts %>%
+  unnest(cols = c(glanced))
+
+
+ggplot(assignments, aes(x = Distance, y = Speeding)) +
+  geom_point(aes(color = .cluster), alpha = 0.8) + 
+  facet_wrap(~ k)
+```
+
+3 or 4 clusters seems to be most appropriate and allows the drivers to be clustered by speeders vs. non-speeders (3 clusters) or clustered by speeders and distance (4 clusters).    
+
+Task 5:
+```{r task 5}
+ggplot(clusterings, aes(k, tot.withinss)) +
+  geom_line() +
+  geom_point() + theme_bw()
+```
+
+4 seems to be the best value for k.  
+
+Task 6:
+```{r task 6}
+set.seed(64)
+clusters = kmeans(trucks_cleaned, 4)
+```
+
+```{r}
+trucks = augment(clusters, trucks)
+str(trucks)
+```
+
+```{r}
+ggplot(trucks, aes(x=Distance,y=Speeding,color=factor(.cluster))) + geom_point() 
+```
+
+4 clusters groups the drivers into:  
+1) drivers who drive under 100 miles/day and speed < ~15%  
+2) drivers who drive under 100 miles/day and speed > ~15%  
+3) drivers who drive over 100 miles/day and speed < ~35%  
+4) drivers who drive over 100 miles/day and speed > ~35%     
+
